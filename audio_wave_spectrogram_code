@@ -1,0 +1,123 @@
+import speech_recognition as sr
+from IPython.display import Audio, display
+import pyaudio
+import wave
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import signal
+
+import os
+import librosa
+import librosa.display
+
+
+#FUNÇÃO PARA GRAVAR
+def record_audio(filename, duration=5):
+    FORMAT = pyaudio.paInt16  
+    CHANNELS = 1  # (1-mono, 2-estéreo)
+    RATE = 44100 
+    CHUNK = 1024  # frames/bloco
+
+    audio = pyaudio.PyAudio()
+
+    stream = audio.open(format=FORMAT,
+                        channels=CHANNELS,
+                        rate=RATE,
+                        input=True,
+                        frames_per_buffer=CHUNK)
+
+    print("Fale: ...")
+    frames = []
+    
+    for i in range(0, int(RATE / CHUNK * duration)):
+        data = stream.read(CHUNK)
+        frames.append(data)
+
+    print("Gravação concluída.")
+
+    stream.stop_stream()
+    stream.close()
+    audio.terminate()
+
+    # Salva em um arquivo WAV
+    wf = wave.open(filename, 'wb')
+    wf.setnchannels(CHANNELS)
+    wf.setsampwidth(audio.get_sample_size(FORMAT))
+    wf.setframerate(RATE)
+    wf.writeframes(b''.join(frames))
+    wf.close()
+
+#FUNÇÃO PARA RECONHECER
+def recognize_speech(audio_file):
+    recognizer = sr.Recognizer()
+
+    with sr.AudioFile(audio_file) as source:
+        audio_data = recognizer.record(source)
+
+    try:
+        text = recognizer.recognize_google(audio_data, language='pt-BR')
+        print("Texto reconhecido:", text)
+    except sr.UnknownValueError:
+        print("Não foi possível entender a fala.")
+    except sr.RequestError as e:
+        print("Erro ao solicitar reconhecimento de fala:", e)
+
+#FUNÇÃO PARA PLOTAR ÁUDIO EM ONDA
+def plot_waveform(filename):
+    with wave.open(filename, 'rb') as wf:
+        num_channels = wf.getnchannels()
+        sample_width = wf.getsampwidth()
+        frame_rate = wf.getframerate()
+        num_frames = wf.getnframes()
+
+        raw_data = wf.readframes(num_frames)
+
+    if sample_width == 1:
+        data = np.frombuffer(raw_data, dtype=np.uint8)
+        data = (data - 128) / 128.0  # Normaliza os valores para o intervalo [-1, 1]
+    elif sample_width == 2:
+        data = np.frombuffer(raw_data, dtype=np.int16)
+        data = data / (2 ** 15)
+    else:
+        raise ValueError("Unsupported sample width")
+
+    time = np.linspace(0, num_frames / frame_rate, num_frames)
+
+    # Plota o áudio em formato de onda
+    plt.figure(figsize=(11, 6))
+    plt.plot(time, data, color='b')
+    plt.xlabel('Tempo (s)')
+    plt.ylabel('Amplitude')
+    plt.title('Forma de onda do áudio')
+    plt.grid(True)
+    plt.show()
+
+#FUNÇÃO PARA 'PLOTAR' O ÁUDIO
+def display_audio(filename):
+    display(Audio(filename))
+
+#FUNÇÃO PARA PLOTAR O ESPECTROGRAMA
+
+def plot_spectrogram(filename):
+    y, sr = librosa.load(filename, sr=44100) #sr = sample rate (taxa de amostragem)
+
+    S = librosa.feature.melspectrogram(y=y, sr=sr) #calcula o spectro com o STFT do librosa
+
+    S_dB = librosa.power_to_db(S, ref=np.max) #conversão para db
+
+    # Plota o espectrograma
+    plt.figure(figsize=(11, 6))
+    librosa.display.specshow(S_dB, sr=sr, x_axis='time', y_axis='mel')
+    plt.title('Espectrograma do Áudio')
+    plt.xlabel('Tempo (s)')
+    plt.ylabel('Frequência (Hz)')
+    plt.tight_layout()
+    plt.show()
+
+
+audio_filename = "audio.wav"
+record_audio(audio_filename, duration=5)
+recognize_speech(audio_filename)
+display_audio(audio_filename)
+plot_waveform(audio_filename)
+plot_spectrogram(audio_filename)
